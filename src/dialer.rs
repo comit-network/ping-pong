@@ -1,4 +1,4 @@
 /// Entry point for the dialer sub-command.
-pub fn run() {
-    println!("dialer")
+pub fn run(addr: &str) {
+    println!("dialer: {}", addr)
 }

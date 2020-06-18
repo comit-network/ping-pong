@@ -1,4 +1,5 @@
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg};
+use std::process;
 
 mod dialer;
 mod listener;
@@ -6,25 +7,31 @@ mod listener;
 fn main() {
     let matches = App::new("ping-pong")
         .version("0.1")
-        .subcommand(
-            SubCommand::with_name("dialer")
-                .about("Run application as a dialer, does the ping")
-                .arg(
-                    Arg::with_name("address")
-                        .help("IP address to dial")
-                        .index(1)
-                        .required(true),
-                ),
+        .arg(
+            Arg::with_name("dialer")
+                .help("Run as the dialer i.e., do the ping")
+                .long("dialer")
+                .short("d"),
         )
-        .subcommand(
-            SubCommand::with_name("listener").about("Run application as a listener, does the pong"),
+        .arg(
+            Arg::with_name("listener")
+                .help("Run as the listener i.e., do the pong [default]")
+                .long("listener")
+                .short("l"),
         )
+        .args(&[Arg::with_name("address")
+            .help("IP address to use")
+            .index(1)
+            .required(false)])
         .get_matches();
 
-    match matches.subcommand_name() {
-        Some("dialer") => dialer::run(),
-        Some("listener") => listener::run(),
-        None => println!("No subcommand was used: specify dialer or listener"),
-        _ => println!("Unknown subcommand, pingpong -h for help"), // We never actually hit this.
+    if matches.is_present("dialer") {
+        if !matches.is_present("address") {
+            eprintln!("IP address required to run ping-pong as dialer");
+            process::exit(1);
+        }
+        dialer::run(matches.value_of("address").unwrap())
+    } else {
+        listener::run()
     }
 }
