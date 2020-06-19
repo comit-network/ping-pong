@@ -1,10 +1,10 @@
+use anyhow::{bail, Result};
 use clap::{App, Arg};
-use std::process;
 
 mod dialer;
 mod listener;
 
-fn main() {
+fn main() -> Result<()> {
     let matches = App::new("ping-pong")
         .version("0.1")
         .arg(
@@ -26,11 +26,17 @@ fn main() {
         .get_matches();
 
     if matches.is_present("dialer") {
-        if !matches.is_present("address") {
-            eprintln!("IP address required to run ping-pong as dialer");
-            process::exit(1);
-        }
-        dialer::run(matches.value_of("address").unwrap())
+        let addr = match matches.value_of("address") {
+            None => bail!("IP address required to run ping-pong as dialer"),
+            Some(addr) => addr,
+        };
+
+        let addr = match addr.parse() {
+            Err(e) => bail!("failed to parse multiaddr: {:?}", e),
+            Ok(addr) => addr,
+        };
+
+        dialer::run(addr)
     } else {
         listener::run()
     }

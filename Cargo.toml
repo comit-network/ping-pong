@@ -5,4 +5,8 @@ authors = ["Tobin C. Harding <tobin@coblox.tech>"]
 edition = "2018"
 
 [dependencies]
+async-std = "1.6"
 clap = "2.32"
+futures = "0.3"
+libp2p = "0.19"
+anyhow = "1.0"
