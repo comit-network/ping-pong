@@ -8,6 +8,7 @@ use libp2p::{
     Multiaddr, PeerId, Swarm,
 };
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 /// Entry point for the dialer sub-command.
 pub fn run(addr: Multiaddr) -> Result<()> {
@@ -15,7 +16,11 @@ pub fn run(addr: Multiaddr) -> Result<()> {
     let peer_id = PeerId::from(id_keys.public());
 
     let transport = transport::build(id_keys)?;
-    let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
+    let behaviour = Ping::new(
+        PingConfig::new()
+            .with_keep_alive(true)
+            .with_interval(Duration::from_secs(1)),
+    );
 
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
