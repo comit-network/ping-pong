@@ -3,6 +3,7 @@ use clap::{App, Arg};
 
 mod dialer;
 mod listener;
+mod transport;
 
 fn main() -> Result<()> {
     let matches = App::new("ping-pong")

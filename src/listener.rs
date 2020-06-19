@@ -1,3 +1,4 @@
+use crate::transport;
 use anyhow::Result;
 use async_std::task;
 use futures::{future, prelude::*};
@@ -13,7 +14,7 @@ pub fn run() -> Result<()> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
 
-    let transport = libp2p::build_development_transport(id_keys)?;
+    let transport = transport::build(id_keys)?;
     let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
 
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
