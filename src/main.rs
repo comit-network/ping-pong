@@ -28,19 +28,19 @@ fn main() -> Result<()> {
             .required(false)])
         .get_matches();
 
+    let addr = match matches.value_of("address") {
+        Some(addr) => addr,
+        None => ADDR,
+    };
+
+    let addr = match addr.parse() {
+        Ok(addr) => addr,
+        Err(e) => bail!("failed to parse multiaddr: {:?}", e),
+    };
+
     if matches.is_present("dialer") {
-        let addr = match matches.value_of("address") {
-            None => ADDR,
-            Some(addr) => addr,
-        };
-
-        let addr = match addr.parse() {
-            Err(e) => bail!("failed to parse multiaddr: {:?}", e),
-            Ok(addr) => addr,
-        };
-
         dialer::run(addr)
     } else {
-        listener::run()
+        listener::run(addr)
     }
 }

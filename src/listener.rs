@@ -5,12 +5,12 @@ use futures::{future, prelude::*};
 use libp2p::{
     identity,
     ping::{Ping, PingConfig},
-    PeerId, Swarm,
+    Multiaddr, PeerId, Swarm,
 };
 use std::task::{Context, Poll};
 
 /// Entry point for the listener sub-command.
-pub fn run() -> Result<()> {
+pub fn run(addr: Multiaddr) -> Result<()> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
 
@@ -19,7 +19,7 @@ pub fn run() -> Result<()> {
 
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
-    Swarm::listen_on(&mut swarm, "/ip4/127.0.0.1/tcp/4444".parse()?)?;
+    Swarm::listen_on(&mut swarm, addr)?;
 
     let mut listening = false;
     task::block_on(future::poll_fn(move |cx: &mut Context| loop {
