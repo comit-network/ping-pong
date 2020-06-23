@@ -5,6 +5,8 @@ mod dialer;
 mod listener;
 mod transport;
 
+const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
+
 fn main() -> Result<()> {
     let matches = App::new("ping-pong")
         .version("0.1")
@@ -28,7 +30,7 @@ fn main() -> Result<()> {
 
     if matches.is_present("dialer") {
         let addr = match matches.value_of("address") {
-            None => bail!("IP address required to run ping-pong as dialer"),
+            None => ADDR,
             Some(addr) => addr,
         };
 
