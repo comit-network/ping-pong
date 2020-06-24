@@ -48,22 +48,14 @@ pub async fn run_listener(addr: Multiaddr) -> Result<()> {
     let config = PingConfig::new().with_keep_alive(true);
     let mut swarm = crate::build_swarm(config)?;
 
-    Swarm::listen_on(&mut swarm, addr)?;
+    Swarm::listen_on(&mut swarm, addr.clone())?;
+    println!("Listening on {}", addr);
 
-    let mut listening = false;
     future::poll_fn(move |cx: &mut Context| loop {
         match swarm.poll_next_unpin(cx) {
             Poll::Ready(Some(event)) => println!("{:?}", event),
             Poll::Ready(None) => return Poll::Ready(()),
-            Poll::Pending => {
-                if !listening {
-                    for addr in Swarm::listeners(&swarm) {
-                        println!("Listening on {}", addr);
-                        listening = true;
-                    }
-                }
-                return Poll::Pending;
-            }
+            Poll::Pending => return Poll::Pending,
         }
     })
     .await;
