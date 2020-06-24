@@ -8,6 +8,6 @@ edition = "2018"
 anyhow = "1.0"
 clap = "2.32"
 futures = "0.3"
-libp2p = { version = "0.19", default-features = false, features = ["tcp-async-std", "secio", "yamux", "mplex", "dns", "ping"] }
+libp2p = { version = "0.20", default-features = false, features = ["tcp-tokio", "secio", "yamux", "mplex", "dns", "ping"] }
 simple_logger = "1.6"
 tokio = { version = "0.2", default-features = false, features = ["rt-threaded", "macros", "tcp"] }

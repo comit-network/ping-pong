@@ -13,7 +13,7 @@ use libp2p::{
     mplex::MplexConfig,
     ping::{Ping, PingConfig},
     secio::{SecioConfig, SecioError},
-    tcp::TcpConfig,
+    tcp::TokioTcpConfig,
     yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use std::{
@@ -81,7 +81,7 @@ pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
 /// - authentication via secio
 /// - multiplexing via yamux or mplex
 pub fn build_transport(keypair: identity::Keypair) -> anyhow::Result<PingPongTransport> {
-    let transport = TcpConfig::new().nodelay(true);
+    let transport = TokioTcpConfig::new().nodelay(true);
     let transport = DnsConfig::new(transport)?;
 
     let transport = transport
