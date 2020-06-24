@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use async_std::task;
 use clap::{App, Arg};
-use ping_pong::{dialer, listener};
+use ping_pong::{run_dialer, run_listener};
 
 const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 
@@ -35,9 +35,9 @@ fn main() -> Result<()> {
         .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
 
     if matches.is_present("dialer") {
-        task::block_on(dialer::run(addr)).expect("failed to run dialer");
+        task::block_on(run_dialer(addr)).expect("failed to run dialer");
     } else {
-        task::block_on(listener::run(addr)).expect("failed to run listener");
+        task::block_on(run_listener(addr)).expect("failed to run listener");
     }
 
     Ok(())

@@ -1,7 +1,5 @@
-pub mod dialer;
-pub mod listener;
-
 use anyhow::Result;
+use futures::{future, prelude::*};
 use libp2p::{
     core::{
         either::EitherError,
@@ -16,9 +14,13 @@ use libp2p::{
     ping::{Ping, PingConfig},
     secio::{SecioConfig, SecioError},
     tcp::TcpConfig,
-    yamux, PeerId, Swarm, Transport,
+    yamux, Multiaddr, PeerId, Swarm, Transport,
 };
-use std::{io, time::Duration};
+use std::{
+    io,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 pub type PingPongTransport = Boxed<
     (PeerId, StreamMuxerBox),
@@ -63,4 +65,53 @@ pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
     let swarm = Swarm::new(transport, behaviour, peer_id);
 
     Ok(swarm)
+}
+
+/// Entry point to run the ping-pong app as a dialer.
+pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
+    let config = PingConfig::new()
+        .with_keep_alive(true)
+        .with_interval(Duration::from_secs(1));
+    let mut swarm = crate::build_swarm(config)?;
+
+    Swarm::dial_addr(&mut swarm, addr).unwrap();
+
+    future::poll_fn(move |cx: &mut Context| loop {
+        match swarm.poll_next_unpin(cx) {
+            Poll::Ready(Some(event)) => println!("{:?}", event),
+            Poll::Ready(None) => return Poll::Ready(()),
+            Poll::Pending => return Poll::Pending,
+        }
+    })
+    .await;
+
+    Ok(())
+}
+
+/// Entry point to run the ping-pong app as a listener.
+pub async fn run_listener(addr: Multiaddr) -> Result<()> {
+    let config = PingConfig::new().with_keep_alive(true);
+    let mut swarm = crate::build_swarm(config)?;
+
+    Swarm::listen_on(&mut swarm, addr)?;
+
+    let mut listening = false;
+    future::poll_fn(move |cx: &mut Context| loop {
+        match swarm.poll_next_unpin(cx) {
+            Poll::Ready(Some(event)) => println!("{:?}", event),
+            Poll::Ready(None) => return Poll::Ready(()),
+            Poll::Pending => {
+                if !listening {
+                    for addr in Swarm::listeners(&swarm) {
+                        println!("Listening on {}", addr);
+                        listening = true;
+                    }
+                }
+                return Poll::Pending;
+            }
+        }
+    })
+    .await;
+
+    Ok(())
 }
