@@ -1,13 +1,13 @@
 #![warn(rust_2018_idioms)]
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result};
-use async_std::task;
 use clap::{App, Arg};
 use ping_pong::{run_dialer, run_listener};
 
 const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let matches = App::new("ping-pong")
         .version("0.1")
         .arg(
@@ -35,9 +35,9 @@ fn main() -> Result<()> {
         .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
 
     if matches.is_present("dialer") {
-        task::block_on(run_dialer(addr)).expect("failed to run dialer");
+        run_dialer(addr).await?;
     } else {
-        task::block_on(run_listener(addr)).expect("failed to run listener");
+        run_listener(addr).await?;
     }
 
     Ok(())
