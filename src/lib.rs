@@ -1,6 +1,7 @@
 pub mod dialer;
 pub mod listener;
 
+use anyhow::Result;
 use libp2p::{
     core::{
         either::EitherError,
@@ -12,9 +13,10 @@ use libp2p::{
     dns::{DnsConfig, DnsErr},
     identity,
     mplex::MplexConfig,
+    ping::{Ping, PingConfig},
     secio::{SecioConfig, SecioError},
     tcp::TcpConfig,
-    yamux, PeerId, Transport,
+    yamux, PeerId, Swarm, Transport,
 };
 use std::{io, time::Duration};
 
@@ -49,4 +51,16 @@ pub fn build_transport(keypair: identity::Keypair) -> anyhow::Result<PingPongTra
         .boxed();
 
     Ok(transport)
+}
+
+pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
+    let id_keys = identity::Keypair::generate_ed25519();
+    let peer_id = PeerId::from(id_keys.public());
+
+    let transport = crate::build_transport(id_keys)?;
+    let behaviour = Ping::new(config);
+
+    let swarm = Swarm::new(transport, behaviour, peer_id);
+
+    Ok(swarm)
 }
