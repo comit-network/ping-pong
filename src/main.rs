@@ -1,6 +1,7 @@
 #![warn(rust_2018_idioms)]
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result};
+use async_std::task;
 use clap::{App, Arg};
 use ping_pong::{dialer, listener};
 
@@ -34,8 +35,10 @@ fn main() -> Result<()> {
         .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
 
     if matches.is_present("dialer") {
-        dialer::run(addr)
+        task::block_on(dialer::run(addr)).expect("failed to run dialer");
     } else {
-        listener::run(addr)
+        task::block_on(listener::run(addr)).expect("failed to run listener");
     }
+
+    Ok(())
 }
