@@ -8,6 +8,11 @@ edition = "2018"
 anyhow = "1.0"
 clap = "2.32"
 futures = "0.3"
-libp2p = { version = "0.20", default-features = false, features = ["tcp-tokio", "secio", "yamux", "mplex", "dns", "ping"] }
+futures-timer = "3.0"
+get_if_addrs = "0.5"
+ipnet = "2.3"
+libp2p = { version = "0.20", default-features = false, features = [ "secio", "yamux", "mplex", "dns", "tcp-tokio", "ping"] }
+log = "0.4"
 simple_logger = "1.6"
+socket2 = "0.3"
 tokio = { version = "0.2", default-features = false, features = ["rt-threaded", "macros", "tcp"] }

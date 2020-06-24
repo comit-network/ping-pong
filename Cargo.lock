@@ -1170,8 +1170,13 @@ dependencies = [
  "anyhow",
  "clap",
  "futures",
+ "futures-timer",
+ "get_if_addrs",
+ "ipnet",
  "libp2p",
+ "log",
  "simple_logger",
+ "socket2",
  "tokio",
 ]
 

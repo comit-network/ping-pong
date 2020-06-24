@@ -1,3 +1,6 @@
+mod transport;
+
+use crate::transport::TokioTcpConfig;
 use anyhow::Result;
 use futures::{future, prelude::*};
 use libp2p::{
@@ -13,7 +16,6 @@ use libp2p::{
     mplex::MplexConfig,
     ping::{Ping, PingConfig},
     secio::{SecioConfig, SecioError},
-    tcp::TokioTcpConfig,
     yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use std::{
