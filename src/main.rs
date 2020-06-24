@@ -1,3 +1,5 @@
+#![warn(rust_2018_idioms)]
+#![forbid(unsafe_code)]
 use anyhow::{Context, Result};
 use clap::{App, Arg};
 use ping_pong::{dialer, listener};
