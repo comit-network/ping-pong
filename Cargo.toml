@@ -8,5 +8,5 @@ edition = "2018"
 anyhow = "1.0"
 clap = "2.32"
 futures = "0.3"
-libp2p = "0.19"
-tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "sync"] }
+libp2p = { version = "0.19", default-features = false, features = ["tcp-async-std", "secio", "yamux", "mplex", "dns", "ping"] }
+tokio = { version = "0.2", default-features = false, features = ["rt-threaded", "macros", "tcp"] }
