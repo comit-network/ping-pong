@@ -1,9 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{App, Arg};
-
-mod dialer;
-mod listener;
-mod transport;
+use ping_pong::{dialer, listener};
 
 const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 
