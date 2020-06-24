@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Context, Result};
 use clap::{App, Arg};
 
 mod dialer;
@@ -28,15 +28,11 @@ fn main() -> Result<()> {
             .required(false)])
         .get_matches();
 
-    let addr = match matches.value_of("address") {
-        Some(addr) => addr,
-        None => ADDR,
-    };
+    let addr = matches.value_of("address").unwrap_or(ADDR);
 
-    let addr = match addr.parse() {
-        Ok(addr) => addr,
-        Err(e) => bail!("failed to parse multiaddr: {:?}", e),
-    };
+    let addr = addr
+        .parse()
+        .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
 
     if matches.is_present("dialer") {
         dialer::run(addr)
