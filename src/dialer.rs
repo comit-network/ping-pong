@@ -1,8 +1,10 @@
 use anyhow::Result;
 use futures::{future, prelude::*};
 use libp2p::{ping::PingConfig, Multiaddr, Swarm};
-use std::task::{Context, Poll};
-use std::time::Duration;
+use std::{
+    task::{Context, Poll},
+    time::Duration,
+};
 
 /// Entry point for the dialer sub-command.
 pub async fn run(addr: Multiaddr) -> Result<()> {
@@ -20,7 +22,7 @@ pub async fn run(addr: Multiaddr) -> Result<()> {
             Poll::Pending => return Poll::Pending,
         }
     })
-        .await;
+    .await;
 
     Ok(())
 }
