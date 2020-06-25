@@ -5,7 +5,7 @@ use log::Level;
 use ping_pong::{run_dialer, run_listener, Opt};
 use structopt::StructOpt;
 
-const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
+const ADDR: &str = "/ip4/127.0.0.1/tcp/7777";
 
 #[tokio::main]
 async fn main() -> Result<()> {
