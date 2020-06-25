@@ -1,9 +1,9 @@
 #![warn(rust_2018_idioms)]
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result};
-use clap::{App, Arg};
 use log::Level;
-use ping_pong::{run_dialer, run_listener};
+use ping_pong::{run_dialer, run_listener, Opt};
+use structopt::StructOpt;
 
 const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 
@@ -11,33 +11,14 @@ const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 async fn main() -> Result<()> {
     simple_logger::init_with_level(Level::Warn).unwrap();
 
-    let matches = App::new("ping-pong")
-        .version("0.1")
-        .arg(
-            Arg::with_name("dialer")
-                .help("Run as the dialer i.e., do the ping")
-                .long("dialer")
-                .short("d"),
-        )
-        .arg(
-            Arg::with_name("listener")
-                .help("Run as the listener i.e., do the pong [default]")
-                .long("listener")
-                .short("l"),
-        )
-        .args(&[Arg::with_name("address")
-            .help("IP address to use")
-            .index(1)
-            .required(false)])
-        .get_matches();
+    let opt = Opt::from_args();
 
-    let addr = matches.value_of("address").unwrap_or(ADDR);
-
+    let addr = opt.address.unwrap_or_else(|| ADDR.to_string());
     let addr = addr
         .parse()
         .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
 
-    if matches.is_present("dialer") {
+    if opt.dialer {
         run_dialer(addr).await?;
     } else {
         run_listener(addr).await?;

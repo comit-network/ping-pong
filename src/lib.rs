@@ -1,4 +1,7 @@
+mod cli;
 mod transport;
+
+pub use cli::Opt;
 
 use crate::transport::TokioTcpConfig;
 use anyhow::Result;
@@ -11,20 +14,20 @@ use libp2p::{
         upgrade::{SelectUpgrade, Version},
         UpgradeError,
     },
-    swarm::SwarmBuilder,
     dns::{DnsConfig, DnsErr},
     identity,
     mplex::MplexConfig,
     ping::{Ping, PingConfig},
     secio::{SecioConfig, SecioError},
+    swarm::SwarmBuilder,
     yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use std::{
     io,
+    pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
-use std::pin::Pin;
 
 /// Entry point to run the ping-pong app as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
