@@ -2,12 +2,15 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result};
 use clap::{App, Arg};
+use log::Level;
 use ping_pong::{run_dialer, run_listener};
 
 const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    simple_logger::init_with_level(Level::Warn).unwrap();
+
     let matches = App::new("ping-pong")
         .version("0.1")
         .arg(
