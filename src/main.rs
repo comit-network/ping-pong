@@ -8,8 +8,6 @@ const ADDR: &str = "/ip4/127.0.0.1/tcp/4444";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    simple_logger::init().unwrap();
-
     let matches = App::new("ping-pong")
         .version("0.1")
         .arg(
