@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result};
 use log::{warn, Level};
-//use log::warn;
 use ping_pong::{run_dialer, run_listener, Opt, PORT};
 use structopt::StructOpt;
 
@@ -10,7 +9,6 @@ const ADDR: &str = "/ip4/127.0.0.1/tcp/8007";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    //    simple_logger::init()?;
     simple_logger::init_with_level(Level::Info).unwrap();
 
     let opt = Opt::from_args();

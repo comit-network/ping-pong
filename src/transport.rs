@@ -44,7 +44,7 @@ use libp2p::core::{
     transport::{ListenerEvent, TransportError},
     Transport,
 };
-use log::{debug, trace};
+use log::{debug, info, trace};
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::VecDeque,
@@ -196,30 +196,25 @@ impl Transport for TokioTcpConfig {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        debug!("dial: {}", addr);
-
         let dest = tor_address_format(addr.clone())
             .map_err(|_| TransportError::MultiaddrNotSupported(addr.clone()))?;
 
         debug!("proxy: {}", dest);
+        debug!("dial: {}", addr);
 
         async fn do_dial(
             cfg: TokioTcpConfig,
             dest: String,
         ) -> Result<TokioTcpTransStream, io::Error> {
-            debug!("connecting to Tor proxy for onion address: {}", dest);
             let stream = crate::connect_tor_socks_proxy(dest)
                 .await
                 .map_err(|e| io::Error::new(io::ErrorKind::ConnectionRefused, e))?;
-            debug!("Tor proxy: TcpStream connection established");
+            info!("Tor proxy: connection established");
 
-            debug!("applying config ...");
             apply_config(&cfg, &stream)?;
 
             Ok(TokioTcpTransStream { inner: stream })
         }
-
-        debug!("Dialing {}", addr);
 
         Ok(Box::pin(do_dial(self, dest)))
     }
