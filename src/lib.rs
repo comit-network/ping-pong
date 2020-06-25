@@ -1,4 +1,5 @@
 mod cli;
+pub mod tor;
 mod transport;
 
 pub use cli::Opt;

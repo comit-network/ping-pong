@@ -17,3 +17,4 @@ simple_logger = "1.6"
 socket2 = "0.3"
 structopt = "0.3"
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "tcp"] }
+torut = "0.1"

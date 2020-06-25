@@ -14,4 +14,8 @@ pub struct Opt {
     /// Address to use, defaults to 127.0.0.1:4444
     #[structopt(short, long)]
     pub address: Option<String>,
+
+    /// Start a local Tor instance
+    #[structopt(long, short = "t")]
+    pub start_tor: bool,
 }
