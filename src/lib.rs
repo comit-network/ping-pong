@@ -141,8 +141,7 @@ pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
     let onion = OnionAddr::from_torut(torut, port);
 
     println!(
-        "Ping-pong onion service available at: \n\n\t{} \n\t{}\n",
-        onion.address(),
+        "\nPing-pong onion service available at: \n\n\t{}\n",
         onion.multiaddr()
     );
 
@@ -154,7 +153,7 @@ pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
     let mut swarm = crate::build_swarm(config)?;
 
     Swarm::listen_on(&mut swarm, local_addr.clone())?;
-    println!("Listening on {}", local_addr);
+    println!("\nLocal service available at: \n\n\t{}\n", local_addr);
 
     future::poll_fn(move |cx: &mut Context| loop {
         match swarm.poll_next_unpin(cx) {
