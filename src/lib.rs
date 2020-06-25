@@ -29,7 +29,7 @@ use std::{
     time::Duration,
 };
 
-/// Entry point to run the ping-pong app as a dialer.
+/// Entry point to run the ping-pong application as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
     let config = PingConfig::new()
         .with_keep_alive(true)
@@ -50,7 +50,7 @@ pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
     Ok(())
 }
 
-/// Entry point to run the ping-pong app as a listener.
+/// Entry point to run the ping-pong application as a listener.
 pub async fn run_listener(addr: Multiaddr) -> Result<()> {
     let config = PingConfig::new().with_keep_alive(true);
     let mut swarm = crate::build_swarm(config)?;
@@ -70,6 +70,7 @@ pub async fn run_listener(addr: Multiaddr) -> Result<()> {
     Ok(())
 }
 
+/// Build a libp2p swarm (also called a switch).
 pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
@@ -93,10 +94,10 @@ impl libp2p::core::Executor for TokioExecutor {
 }
 
 /// Builds a libp2p transport with the following features:
-/// - TcpConnection
+/// - TCp connectivity
 /// - DNS name resolution
-/// - authentication via secio
-/// - multiplexing via yamux or mplex
+/// - Authentication via secio
+/// - Multiplexing via yamux or mplex
 pub fn build_transport(keypair: identity::Keypair) -> anyhow::Result<PingPongTransport> {
     let transport = TokioTcpConfig::new().nodelay(true);
     let transport = DnsConfig::new(transport)?;
@@ -115,6 +116,7 @@ pub fn build_transport(keypair: identity::Keypair) -> anyhow::Result<PingPongTra
     Ok(transport)
 }
 
+/// libp2p `Transport` for the ping-pong application.
 pub type PingPongTransport = Boxed<
     (PeerId, StreamMuxerBox),
     TransportTimeoutError<
