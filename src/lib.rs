@@ -1,3 +1,6 @@
+mod transport;
+
+use crate::transport::TokioTcpConfig;
 use anyhow::Result;
 use futures::{future, prelude::*};
 use libp2p::{
@@ -8,12 +11,12 @@ use libp2p::{
         upgrade::{SelectUpgrade, Version},
         UpgradeError,
     },
+    swarm::SwarmBuilder,
     dns::{DnsConfig, DnsErr},
     identity,
     mplex::MplexConfig,
     ping::{Ping, PingConfig},
     secio::{SecioConfig, SecioError},
-    tcp::TcpConfig,
     yamux, Multiaddr, PeerId, Swarm, Transport,
 };
 use std::{
@@ -21,6 +24,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use std::pin::Pin;
 
 /// Entry point to run the ping-pong app as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
@@ -70,9 +74,19 @@ pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
     let transport = crate::build_transport(id_keys)?;
     let behaviour = Ping::new(config);
 
-    let swarm = Swarm::new(transport, behaviour, peer_id);
+    let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(TokioExecutor))
+        .build();
 
     Ok(swarm)
+}
+
+struct TokioExecutor;
+
+impl libp2p::core::Executor for TokioExecutor {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        tokio::spawn(future);
+    }
 }
 
 /// Builds a libp2p transport with the following features:
@@ -81,7 +95,7 @@ pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
 /// - authentication via secio
 /// - multiplexing via yamux or mplex
 pub fn build_transport(keypair: identity::Keypair) -> anyhow::Result<PingPongTransport> {
-    let transport = TcpConfig::new().nodelay(true);
+    let transport = TokioTcpConfig::new().nodelay(true);
     let transport = DnsConfig::new(transport)?;
 
     let transport = transport

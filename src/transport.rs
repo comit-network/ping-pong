@@ -1,0 +1,505 @@
+// Copyright 2017 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
+// Copyright 2020 Tobin C. Harding.
+
+//! Implementation of the libp2p `Transport` trait for TCP/IP.
+//!
+//! Copied from github.com/libp2p/rust-libp2p/transports/tcp/lib.rs
+//! Modified by Tobin C. Harding <tobin@coblox.tech.
+//!
+//! # Usage
+//!
+//! This module provides `TokioTcpConfig` which implements the `Transport` trait of the
+//! `libp2p` library.
+
+use futures::{
+    future::{self, Ready},
+    prelude::*,
+};
+use futures_timer::Delay;
+use get_if_addrs::{get_if_addrs, IfAddr};
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use libp2p::core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{ListenerEvent, TransportError},
+    Transport,
+};
+use log::{debug, trace};
+use socket2::{Domain, Socket, Type};
+use std::{
+    collections::VecDeque,
+    convert::TryFrom,
+    io,
+    iter::{self, FromIterator},
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+use tokio::net::{TcpListener, TcpStream};
+
+/// Represents the configuration for a TCP/IP transport capability for libp2p.
+///
+/// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
+/// obtained by libp2p through the tokio reactor.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+#[derive(Debug, Clone, Default)]
+pub struct TokioTcpConfig {
+    /// How long a listener should sleep after receiving an error, before trying again.
+    sleep_on_error: Duration,
+    /// TTL to set for opened sockets, or `None` to keep default.
+    ttl: Option<u32>,
+    /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
+    nodelay: Option<bool>,
+}
+
+impl TokioTcpConfig {
+    /// Creates a new configuration object for TCP/IP.
+    pub fn new() -> TokioTcpConfig {
+        TokioTcpConfig {
+            sleep_on_error: Duration::from_millis(100),
+            ttl: None,
+            nodelay: None,
+        }
+    }
+
+    /// Sets the `TCP_NODELAY` to set for opened sockets.
+    pub fn nodelay(mut self, value: bool) -> Self {
+        self.nodelay = Some(value);
+        self
+    }
+}
+
+type Listener<TUpgrade, TError> =
+    Pin<Box<dyn Stream<Item = Result<ListenerEvent<TUpgrade, TError>, TError>> + Send>>;
+
+impl Transport for TokioTcpConfig {
+    type Output = TokioTcpTransStream;
+    type Error = io::Error;
+    type Listener = Listener<Self::ListenerUpgrade, Self::Error>;
+    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+    type Dial = Pin<Box<dyn Future<Output = Result<TokioTcpTransStream, io::Error>> + Send>>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
+            sa
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+
+        async fn do_listen(
+            cfg: TokioTcpConfig,
+            socket_addr: SocketAddr,
+        ) -> Result<
+            impl Stream<
+                Item = Result<
+                    ListenerEvent<Ready<Result<TokioTcpTransStream, io::Error>>, io::Error>,
+                    io::Error,
+                >,
+            >,
+            io::Error,
+        > {
+            let socket = if socket_addr.is_ipv4() {
+                Socket::new(
+                    Domain::ipv4(),
+                    Type::stream(),
+                    Some(socket2::Protocol::tcp()),
+                )?
+            } else {
+                let s = Socket::new(
+                    Domain::ipv6(),
+                    Type::stream(),
+                    Some(socket2::Protocol::tcp()),
+                )?;
+                s.set_only_v6(true)?;
+                s
+            };
+            if cfg!(target_family = "unix") {
+                socket.set_reuse_address(true)?;
+            }
+            socket.bind(&socket_addr.into())?;
+            socket.listen(1024)?; // we may want to make this configurable
+
+            let listener = <TcpListener>::try_from(socket.into_tcp_listener())
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+            let local_addr = listener.local_addr()?;
+            let port = local_addr.port();
+
+            // Determine all our listen addresses which is either a single local IP address
+            // or (if a wildcard IP address was used) the addresses of all our interfaces,
+            // as reported by `get_if_addrs`.
+            let addrs = if socket_addr.ip().is_unspecified() {
+                let addrs = host_addresses(port)?;
+                debug!(
+                    "Listening on {:?}",
+                    addrs.iter().map(|(_, _, ma)| ma).collect::<Vec<_>>()
+                );
+                Addresses::Many(addrs)
+            } else {
+                let ma = ip_to_multiaddr(local_addr.ip(), port);
+                debug!("Listening on {:?}", ma);
+                Addresses::One(ma)
+            };
+
+            // Generate `NewAddress` events for each new `Multiaddr`.
+            let pending = match addrs {
+                Addresses::One(ref ma) => {
+                    let event = ListenerEvent::NewAddress(ma.clone());
+                    let mut list = VecDeque::new();
+                    list.push_back(Ok(event));
+                    list
+                }
+                Addresses::Many(ref aa) => aa
+                    .iter()
+                    .map(|(_, _, ma)| ma)
+                    .cloned()
+                    .map(ListenerEvent::NewAddress)
+                    .map(Result::Ok)
+                    .collect::<VecDeque<_>>(),
+            };
+
+            let listen_stream = TokioTcpListenStream {
+                stream: listener,
+                pause: None,
+                pause_duration: cfg.sleep_on_error,
+                port,
+                addrs,
+                pending,
+                config: cfg,
+            };
+
+            Ok(stream::unfold(listen_stream, |s| s.next().map(Some)))
+        }
+
+        Ok(Box::pin(do_listen(self, socket_addr).try_flatten_stream()))
+    }
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        async fn do_dial(
+            cfg: TokioTcpConfig,
+            socket_addr: SocketAddr,
+        ) -> Result<TokioTcpTransStream, io::Error> {
+            let stream = TcpStream::connect(&socket_addr).await?;
+            debug!("applying config ...");
+            apply_config(&cfg, &stream)?;
+
+            Ok(TokioTcpTransStream { inner: stream })
+        }
+
+        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
+            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+                debug!("Instantly refusing dialing {}, as it is invalid", addr);
+                return Err(TransportError::Other(
+                    io::ErrorKind::ConnectionRefused.into(),
+                ));
+            }
+            socket_addr
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+
+        debug!("Dialing {}", addr);
+
+        Ok(Box::pin(do_dial(self, socket_addr)))
+    }
+}
+
+/// Stream that listens on an TCP/IP address.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+pub struct TokioTcpListenStream {
+    /// The incoming connections.
+    stream: TcpListener,
+    /// The current pause if any.
+    pause: Option<Delay>,
+    /// How long to pause after an error.
+    pause_duration: Duration,
+    /// The port which we use as our listen port in listener event addresses.
+    port: u16,
+    /// The set of known addresses.
+    addrs: Addresses,
+    /// Temporary buffer of listener events.
+    pending: Buffer<TokioTcpTransStream>,
+    /// Original configuration.
+    config: TokioTcpConfig,
+}
+
+impl TokioTcpListenStream {
+    /// Takes ownership of the listener, and returns the next incoming event and the listener.
+    async fn next(
+        mut self,
+    ) -> (
+        Result<ListenerEvent<Ready<Result<TokioTcpTransStream, io::Error>>, io::Error>, io::Error>,
+        Self,
+    ) {
+        loop {
+            if let Some(event) = self.pending.pop_front() {
+                return (event, self);
+            }
+
+            if let Some(pause) = self.pause.take() {
+                let _ = pause.await;
+            }
+
+            // TODO: do we get the peer_addr at the same time?
+            let (sock, _) = match self.stream.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    debug!("error accepting incoming connection: {}", e);
+                    self.pause = Some(Delay::new(self.pause_duration));
+                    return (Ok(ListenerEvent::Error(e)), self);
+                }
+            };
+
+            let sock_addr = match sock.peer_addr() {
+                Ok(addr) => addr,
+                Err(err) => {
+                    debug!("Failed to get peer address: {:?}", err);
+                    continue;
+                }
+            };
+
+            let local_addr = match sock.local_addr() {
+                Ok(sock_addr) => {
+                    if let Addresses::Many(ref mut addrs) = self.addrs {
+                        if let Err(err) = check_for_interface_changes(
+                            &sock_addr,
+                            self.port,
+                            addrs,
+                            &mut self.pending,
+                        ) {
+                            return (Ok(ListenerEvent::Error(err)), self);
+                        }
+                    }
+                    ip_to_multiaddr(sock_addr.ip(), sock_addr.port())
+                }
+                Err(err) => {
+                    debug!("Failed to get local address of incoming socket: {:?}", err);
+                    continue;
+                }
+            };
+
+            let remote_addr = ip_to_multiaddr(sock_addr.ip(), sock_addr.port());
+
+            match apply_config(&self.config, &sock) {
+                Ok(()) => {
+                    trace!("Incoming connection from {} at {}", remote_addr, local_addr);
+                    self.pending.push_back(Ok(ListenerEvent::Upgrade {
+                        upgrade: future::ok(TokioTcpTransStream { inner: sock }),
+                        local_addr,
+                        remote_addr,
+                    }))
+                }
+                Err(err) => {
+                    debug!(
+                        "Error upgrading incoming connection from {}: {:?}",
+                        remote_addr, err
+                    );
+                    self.pending.push_back(Ok(ListenerEvent::Upgrade {
+                        upgrade: future::err(err),
+                        local_addr,
+                        remote_addr,
+                    }))
+                }
+            }
+        }
+    }
+}
+
+/// Wraps around a `TcpStream` and adds logging for important events.
+#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+#[derive(Debug)]
+pub struct TokioTcpTransStream {
+    inner: TcpStream,
+}
+
+impl Drop for TokioTcpTransStream {
+    fn drop(&mut self) {
+        if let Ok(addr) = self.inner.peer_addr() {
+            debug!("Dropped TCP connection to {:?}", addr);
+        } else {
+            debug!("Dropped TCP connection to undeterminate peer");
+        }
+    }
+}
+
+/// Applies the socket configuration parameters to a socket.
+fn apply_config(config: &TokioTcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
+    if let Some(ttl) = config.ttl {
+        socket.set_ttl(ttl)?;
+    }
+
+    if let Some(nodelay) = config.nodelay {
+        socket.set_nodelay(nodelay)?;
+    }
+
+    Ok(())
+}
+
+impl AsyncRead for TokioTcpTransStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.inner), cx, buf)
+    }
+}
+
+impl AsyncWrite for TokioTcpTransStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.inner), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.inner), cx)
+    }
+}
+
+// This type of logic should probably be moved into the multiaddr package
+fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
+    let mut iter = addr.iter();
+    let proto1 = iter.next().ok_or(())?;
+    let proto2 = iter.next().ok_or(())?;
+
+    if iter.next().is_some() {
+        return Err(());
+    }
+
+    match (proto1, proto2) {
+        (Protocol::Ip4(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        (Protocol::Ip6(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        _ => Err(()),
+    }
+}
+
+// Create a [`Multiaddr`] from the given IP address and port number.
+fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
+    let proto = match ip {
+        IpAddr::V4(ip) => Protocol::Ip4(ip),
+        IpAddr::V6(ip) => Protocol::Ip6(ip),
+    };
+    let it = iter::once(proto).chain(iter::once(Protocol::Tcp(port)));
+    Multiaddr::from_iter(it)
+}
+
+// Collect all local host addresses and use the provided port number as listen port.
+fn host_addresses(port: u16) -> io::Result<Vec<(IpAddr, IpNet, Multiaddr)>> {
+    let mut addrs = Vec::new();
+    for iface in get_if_addrs()? {
+        let ip = iface.ip();
+        let ma = ip_to_multiaddr(ip, port);
+        let ipn = match iface.addr {
+            IfAddr::V4(ip4) => {
+                let prefix_len = (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
+                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u32, so can not exceed 32");
+                IpNet::V4(ipnet)
+            }
+            IfAddr::V6(ip6) => {
+                let prefix_len = (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
+                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
+                    .expect("prefix_len is the number of bits in a u128, so can not exceed 128");
+                IpNet::V6(ipnet)
+            }
+        };
+        addrs.push((ip, ipn, ma))
+    }
+    Ok(addrs)
+}
+
+/// Listen address information.
+#[derive(Debug)]
+enum Addresses {
+    /// A specific address is used to listen.
+    One(Multiaddr),
+    /// A set of addresses is used to listen.
+    Many(Vec<(IpAddr, IpNet, Multiaddr)>),
+}
+
+type Buffer<T> = VecDeque<Result<ListenerEvent<Ready<Result<T, io::Error>>, io::Error>, io::Error>>;
+
+// If we listen on all interfaces, find out to which interface the given
+// socket address belongs. In case we think the address is new, check
+// all host interfaces again and report new and expired listen addresses.
+fn check_for_interface_changes<T>(
+    socket_addr: &SocketAddr,
+    listen_port: u16,
+    listen_addrs: &mut Vec<(IpAddr, IpNet, Multiaddr)>,
+    pending: &mut Buffer<T>,
+) -> Result<(), io::Error> {
+    // Check for exact match:
+    if listen_addrs.iter().any(|(ip, ..)| ip == &socket_addr.ip()) {
+        return Ok(());
+    }
+
+    // No exact match => check netmask
+    if listen_addrs
+        .iter()
+        .any(|(_, net, _)| net.contains(&socket_addr.ip()))
+    {
+        return Ok(());
+    }
+
+    // The local IP address of this socket is new to us.
+    // We check for changes in the set of host addresses and report new
+    // and expired addresses.
+    //
+    // TODO: We do not detect expired addresses unless there is a new address.
+    let old_listen_addrs = std::mem::replace(listen_addrs, host_addresses(listen_port)?);
+
+    // Check for addresses no longer in use.
+    for (ip, _, ma) in old_listen_addrs.iter() {
+        if listen_addrs.iter().find(|(i, ..)| i == ip).is_none() {
+            debug!("Expired listen address: {}", ma);
+            pending.push_back(Ok(ListenerEvent::AddressExpired(ma.clone())));
+        }
+    }
+
+    // Check for new addresses.
+    for (ip, _, ma) in listen_addrs.iter() {
+        if old_listen_addrs.iter().find(|(i, ..)| i == ip).is_none() {
+            debug!("New listen address: {}", ma);
+            pending.push_back(Ok(ListenerEvent::NewAddress(ma.clone())));
+        }
+    }
+
+    // We should now be able to find the local address, if not something
+    // is seriously wrong and we report an error.
+    if listen_addrs
+        .iter()
+        .find(|(ip, net, _)| ip == &socket_addr.ip() || net.contains(&socket_addr.ip()))
+        .is_none()
+    {
+        let msg = format!("{} does not match any listen address", socket_addr.ip());
+        return Err(io::Error::new(io::ErrorKind::Other, msg));
+    }
+
+    Ok(())
+}
