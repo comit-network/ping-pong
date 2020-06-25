@@ -30,6 +30,8 @@
 //! This module provides `TokioTcpConfig` which implements the `Transport` trait of the
 //! `libp2p` library.
 
+use crate::OnionAddr;
+use anyhow::Result;
 use futures::{
     future::{self, Ready},
     prelude::*,
@@ -194,32 +196,32 @@ impl Transport for TokioTcpConfig {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        debug!("dial: {}", addr);
+
+        let dest = tor_address_format(addr.clone())
+            .map_err(|_| TransportError::MultiaddrNotSupported(addr.clone()))?;
+
+        debug!("proxy: {}", dest);
+
         async fn do_dial(
             cfg: TokioTcpConfig,
-            socket_addr: SocketAddr,
+            dest: String,
         ) -> Result<TokioTcpTransStream, io::Error> {
-            let stream = TcpStream::connect(&socket_addr).await?;
+            debug!("connecting to Tor proxy for onion address: {}", dest);
+            let stream = crate::connect_tor_socks_proxy(dest)
+                .await
+                .map_err(|e| io::Error::new(io::ErrorKind::ConnectionRefused, e))?;
+            debug!("Tor proxy: TcpStream connection established");
+
             debug!("applying config ...");
             apply_config(&cfg, &stream)?;
 
             Ok(TokioTcpTransStream { inner: stream })
         }
 
-        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-                debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                return Err(TransportError::Other(
-                    io::ErrorKind::ConnectionRefused.into(),
-                ));
-            }
-            socket_addr
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
-
         debug!("Dialing {}", addr);
 
-        Ok(Box::pin(do_dial(self, socket_addr)))
+        Ok(Box::pin(do_dial(self, dest)))
     }
 }
 
@@ -502,4 +504,9 @@ fn check_for_interface_changes<T>(
     }
 
     Ok(())
+}
+
+pub fn tor_address_format(multi: Multiaddr) -> Result<String> {
+    let onion = OnionAddr::from_multiaddr(multi)?;
+    Ok(onion.address())
 }

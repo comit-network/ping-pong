@@ -1,8 +1,9 @@
+use anyhow::{anyhow, Result};
 use libp2p::{
     multiaddr::{Onion3Addr, Protocol},
     Multiaddr,
 };
-use torut::onion::OnionAddressV3;
+use torut::onion::{OnionAddressV3, TorPublicKeyV3};
 
 // We could do away with this file if libp2p and torut played nicely.
 // TODO: Consider upstreaming things to facilitate this
@@ -21,7 +22,7 @@ pub struct OnionAddr<'a> {
 }
 
 impl OnionAddr<'_> {
-    pub fn new(torut: OnionAddressV3, port: u16) -> Self {
+    pub fn from_torut(torut: OnionAddressV3, port: u16) -> Self {
         let mut buf = [0u8; 35];
         let tpk = torut.get_public_key();
 
@@ -36,6 +37,33 @@ impl OnionAddr<'_> {
             torut,
             libp2p,
             port,
+        }
+    }
+
+    pub fn from_multiaddr(mut multi: Multiaddr) -> Result<Self> {
+        match multi.pop() {
+            Some(Protocol::Onion3(onion)) => {
+                let mut buf = [0u8; 32];
+                let bytes = onion.hash();
+                for (i, &byte) in bytes.iter().enumerate() {
+                    if i == 32 {
+                        // pub key is the first 32 bytes.
+                        break;
+                    }
+                    buf[i] = byte;
+                }
+                let port = onion.port();
+
+                let key = TorPublicKeyV3::from_bytes(&buf)?;
+                let torut = OnionAddressV3::from(&key);
+
+                Ok(OnionAddr {
+                    torut,
+                    libp2p: onion,
+                    port,
+                })
+            }
+            _ => Err(anyhow!("not an onion v3 multiaddr")),
         }
     }
 

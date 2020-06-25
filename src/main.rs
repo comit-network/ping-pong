@@ -2,13 +2,15 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result};
 use log::{warn, Level};
-use ping_pong::{run_dialer, run_listener, tor, Opt};
+//use log::warn;
+use ping_pong::{run_dialer, run_listener, Opt, PORT};
 use structopt::StructOpt;
 
-const ADDR: &str = "/ip4/127.0.0.1/tcp/7777";
+const ADDR: &str = "/ip4/127.0.0.1/tcp/8007";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    //    simple_logger::init()?;
     simple_logger::init_with_level(Level::Info).unwrap();
 
     let opt = Opt::from_args();
@@ -18,14 +20,11 @@ async fn main() -> Result<()> {
         .parse()
         .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
 
-    if opt.start_tor {
-        tor::start_tor_instance()?;
-    }
-
     if opt.dialer {
         run_dialer(addr).await?;
     } else {
-        run_listener(addr).await?;
+        // BUG: Port from --address is not used.
+        run_listener(addr, PORT, PORT).await?;
     }
 
     Ok(())

@@ -11,10 +11,12 @@ futures = "0.3"
 futures-timer = "3.0"
 get_if_addrs = "0.5"
 ipnet = "2.3"
+lazy_static = "1.4"
 libp2p = { version = "0.20", default-features = false, features = [ "secio", "yamux", "mplex", "dns", "tcp-tokio", "ping"] }
 log = "0.4"
 simple_logger = "1.6"
 socket2 = "0.3"
 structopt = "0.3"
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "tcp"] }
+tokio-socks = "0.2"
 torut = "0.1"
