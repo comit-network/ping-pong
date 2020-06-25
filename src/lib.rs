@@ -11,6 +11,7 @@ use libp2p::{
         upgrade::{SelectUpgrade, Version},
         UpgradeError,
     },
+    swarm::SwarmBuilder,
     dns::{DnsConfig, DnsErr},
     identity,
     mplex::MplexConfig,
@@ -23,6 +24,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use std::pin::Pin;
 
 /// Entry point to run the ping-pong app as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
@@ -72,9 +74,19 @@ pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
     let transport = crate::build_transport(id_keys)?;
     let behaviour = Ping::new(config);
 
-    let swarm = Swarm::new(transport, behaviour, peer_id);
+    let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(TokioExecutor))
+        .build();
 
     Ok(swarm)
+}
+
+struct TokioExecutor;
+
+impl libp2p::core::Executor for TokioExecutor {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        tokio::spawn(future);
+    }
 }
 
 /// Builds a libp2p transport with the following features:
