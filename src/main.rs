@@ -1,11 +1,16 @@
 #![warn(rust_2018_idioms)]
 #![forbid(unsafe_code)]
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use libp2p::Multiaddr;
 use log::{warn, Level};
-use ping_pong::{run_dialer, run_listener, Opt, PORT};
 use structopt::StructOpt;
 
-const ADDR: &str = "/ip4/127.0.0.1/tcp/8007";
+use ping_pong::{run_dialer, run_listener, OnionAddr, Opt};
+
+/// Local ping-pong server address.
+const LISTENER_ADDR: &str = "/ip4/127.0.0.1/tcp/7777";
+/// Local port as well as the onion service port.
+const PORT: u16 = 7777;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -13,17 +18,34 @@ async fn main() -> Result<()> {
 
     let opt = Opt::from_args();
 
-    let addr = opt.address.unwrap_or_else(|| ADDR.to_string());
-    let addr = addr
-        .parse()
-        .with_context(|| format!("failed to parse multiaddr: {}", addr))?;
-
     if opt.dialer {
+        let addr = match opt.onion {
+            Some(addr) => addr,
+            None => bail!("onion address required to dial"),
+        };
+
+        let addr = multiaddr(&addr)?;
+        if !is_valid_onion_addr(addr.clone()) {
+            bail!("invalid multiaddr: {}", addr);
+        }
+
         run_dialer(addr).await?;
     } else {
-        // BUG: Port from --address is not used.
-        run_listener(addr, PORT, PORT).await?;
+        let addr = multiaddr(LISTENER_ADDR)?;
+        run_listener(addr, PORT).await?;
     }
 
     Ok(())
+}
+
+fn multiaddr(s: &str) -> Result<Multiaddr> {
+    let addr = s
+        .parse()
+        .with_context(|| format!("failed to parse multiaddr: {}", s))?;
+    Ok(addr)
+}
+
+fn is_valid_onion_addr(multi: Multiaddr) -> bool {
+    let onion = OnionAddr::from_multiaddr(multi);
+    onion.is_ok()
 }

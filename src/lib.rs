@@ -3,9 +3,16 @@ mod onion;
 mod transport;
 
 pub use cli::Opt;
-pub use onion::*;
+pub use onion::OnionAddr;
 
-use crate::transport::TokioTcpConfig;
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use anyhow::{bail, Result};
 use futures::{future, prelude::*};
 use lazy_static::lazy_static;
@@ -25,14 +32,7 @@ use libp2p::{
     swarm::SwarmBuilder,
     yamux, Multiaddr, PeerId, Swarm, Transport,
 };
-use log::warn;
-use std::{
-    io,
-    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
-};
+use log::{debug, info};
 use tokio::net::TcpStream;
 use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
 use torut::{
@@ -41,17 +41,14 @@ use torut::{
     utils::{run_tor, AutoKillChild},
 };
 
+use crate::transport::TokioTcpConfig;
+
 lazy_static! {
     /// The default TOR socks5 proxy address, `127.0.0.1:9050`.
     pub static ref TOR_PROXY_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 9050));
     /// The default TOR Controller Protocol address, `127.0.0.1:9051`.
     pub static ref TOR_CP_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 9051));
 }
-
-pub const PORT: u16 = 8007;
-
-//pub const LOCAL_PORT: u16 = 7777;
-//pub const ONION_PORT: u16 = 7;
 
 /// Entry point to run the ping-pong application as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
@@ -75,11 +72,11 @@ pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
 }
 
 /// Entry point to run the ping-pong application as a listener.
-pub async fn run_listener(local_addr: Multiaddr, local_port: u16, onion_port: u16) -> Result<()> {
+pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
     //
     // Run local Tor instance.
     //
-    warn!("if Tor is already running attempting to start it again may hang ...");
+    debug!("if Tor is already running attempting to start it again may hang ...");
 
     let child = run_tor(
         "/usr/bin/tor",
@@ -95,7 +92,7 @@ pub async fn run_listener(local_addr: Multiaddr, local_port: u16, onion_port: u1
     )
     .expect("Starting tor filed");
     let _child = AutoKillChild::new(child);
-    println!("Tor instance started");
+    info!("Tor instance started");
 
     //
     // Get an authenticated connection to the Tor via the Tor Controller protocol.
@@ -132,8 +129,8 @@ pub async fn run_listener(local_addr: Multiaddr, local_port: u16, onion_port: u1
         false,
         None,
         &mut [(
-            onion_port,
-            SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), local_port),
+            port,
+            SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), port),
         )]
         .iter(),
     )
@@ -141,7 +138,7 @@ pub async fn run_listener(local_addr: Multiaddr, local_port: u16, onion_port: u1
     .unwrap();
 
     let torut = key.public().get_onion_address();
-    let onion = OnionAddr::from_torut(torut, PORT);
+    let onion = OnionAddr::from_torut(torut, port);
 
     println!(
         "Ping-pong onion service available at: \n\n\t{} \n\t{}\n",

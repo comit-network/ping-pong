@@ -11,7 +11,7 @@ pub struct Opt {
     #[structopt(short, long)]
     pub listener: bool,
 
-    /// Address to use, defaults to 127.0.0.1:7777
-    #[structopt(short, long)]
-    pub address: Option<String>,
+    /// Onion mulitaddr to use (only required for dialer)
+    #[structopt(long)]
+    pub onion: Option<String>,
 }

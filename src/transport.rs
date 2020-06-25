@@ -23,12 +23,14 @@
 //! Implementation of the libp2p `Transport` trait for TCP/IP.
 //!
 //! Copied from github.com/libp2p/rust-libp2p/transports/tcp/lib.rs
-//! Modified by Tobin C. Harding <tobin@coblox.tech.
+//! Modified by Tobin C. Harding <tobin@coblox.tech>
 //!
-//! # Usage
-//!
-//! This module provides `TokioTcpConfig` which implements the `Transport` trait of the
-//! `libp2p` library.
+//! Modified to enable communication over Tor. This Transport expects,
+//! for the listener side of your application, an onion service to be
+//! added to Tor using the Tor Controller Protocol. As such the listen
+//! code here is identical to the original libp2p tcp Transport. We
+//! modify the dialer to use the Tor socks5 proxy and pass it a
+//! Mulitaddr representing the onion service just mentioned.
 
 use crate::OnionAddr;
 use anyhow::Result;
@@ -199,17 +201,18 @@ impl Transport for TokioTcpConfig {
         let dest = tor_address_format(addr.clone())
             .map_err(|_| TransportError::MultiaddrNotSupported(addr.clone()))?;
 
-        debug!("proxy: {}", dest);
-        debug!("dial: {}", addr);
+        debug!("multi: {}", addr);
+        debug!("onion: {}", dest);
 
         async fn do_dial(
             cfg: TokioTcpConfig,
             dest: String,
         ) -> Result<TokioTcpTransStream, io::Error> {
+            info!("connecting to Tor proxy ...");
             let stream = crate::connect_tor_socks_proxy(dest)
                 .await
                 .map_err(|e| io::Error::new(io::ErrorKind::ConnectionRefused, e))?;
-            info!("Tor proxy: connection established");
+            info!("connection established");
 
             apply_config(&cfg, &stream)?;
 
@@ -218,6 +221,12 @@ impl Transport for TokioTcpConfig {
 
         Ok(Box::pin(do_dial(self, dest)))
     }
+}
+
+// Tor doesn't handle multi addresses ... yet.
+fn tor_address_format(multi: Multiaddr) -> Result<String> {
+    let onion = OnionAddr::from_multiaddr(multi)?;
+    Ok(onion.address())
 }
 
 /// Stream that listens on an TCP/IP address.
@@ -499,9 +508,4 @@ fn check_for_interface_changes<T>(
     }
 
     Ok(())
-}
-
-pub fn tor_address_format(multi: Multiaddr) -> Result<String> {
-    let onion = OnionAddr::from_multiaddr(multi)?;
-    Ok(onion.address())
 }

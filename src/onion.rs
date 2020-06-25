@@ -22,6 +22,7 @@ pub struct OnionAddr<'a> {
 }
 
 impl OnionAddr<'_> {
+    /// Create an onion address from a torut onion address.
     pub fn from_torut(torut: OnionAddressV3, port: u16) -> Self {
         let mut buf = [0u8; 35];
         let tpk = torut.get_public_key();
@@ -40,14 +41,15 @@ impl OnionAddr<'_> {
         }
     }
 
+    /// Crate an onion address from a libp2p Multiaddr.
     pub fn from_multiaddr(mut multi: Multiaddr) -> Result<Self> {
         match multi.pop() {
             Some(Protocol::Onion3(onion)) => {
                 let mut buf = [0u8; 32];
                 let bytes = onion.hash();
                 for (i, &byte) in bytes.iter().enumerate() {
+                    // pub key is the first 32 bytes.
                     if i == 32 {
-                        // pub key is the first 32 bytes.
                         break;
                     }
                     buf[i] = byte;
@@ -67,7 +69,6 @@ impl OnionAddr<'_> {
         }
     }
 
-    /// Onion address string:
     /// vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd.onion:1234
     pub fn address(&self) -> String {
         format!(
@@ -77,7 +78,6 @@ impl OnionAddr<'_> {
         )
     }
 
-    /// Onion multiaddr:
     /// /onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234
     pub fn multiaddr(self) -> Multiaddr {
         Multiaddr::empty().with(Protocol::Onion3(self.libp2p.clone()))
