@@ -1,4 +1,4 @@
-# Ping-Pong
+# Project Harpocrates - Ping-Pong
 
 Basic TCP peer to peer connectivity [1] using libp2p over the Tor network.
 
