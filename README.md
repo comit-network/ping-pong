@@ -9,7 +9,7 @@ connect to a local Tor instance using the [Tor Control
 Protocol](https://gitweb.torproject.org/torspec.git/tree/control-spec.txt)
 (hats off to the authors, nice library).
 
-For the dialer we modify the TCP Transport's `dial` function to first
+For the dialer we modify the TCP Transport's `dial` method to first
 connect to the Tor instance started by the listener [2] via a socks5
 proxy connection. We convert the Multiaddr (onion) to a format that
 Tor can understand and then connect to the onion service using TCP via
