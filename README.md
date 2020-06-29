@@ -27,7 +27,14 @@ libraries use `tokio`.
 
 ## Usage
 
-Run the listener (as root, see below for reason):
+0. Install Tor
+1. Make sure Tor can be started but is _not_ currently running
+2. In one terminal, run the listener (as root, see below for reason)
+3. In another terminal, run the dialer (does not need root)
+
+See `ping-pong --help` for help.
+
+The listener:
 
 ```
 sudo target/debug/ping-pong
@@ -48,7 +55,8 @@ PingEvent { peer: PeerId("12D3KooWKWFYYkyEhaEFLeMerJ1AEYjAQYfhis1YuZjA1HWwkSxh")
 PingEvent { peer: PeerId("12D3KooWKWFYYkyEhaEFLeMerJ1AEYjAQYfhis1YuZjA1HWwkSxh"), result: Ok(Pong) }
 ```
 
-In another terminal run the dialer:
+The dialer:
+
 ```
 target/debug/ping-pong --dialer --onion /onion3/jymc37wy2zeiv3y42e2wd6aaqmhl6ckgn4lgdapdw2oln4ydkorqaaad:7777
 [sudo] password for tobin:
