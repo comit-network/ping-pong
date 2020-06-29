@@ -28,7 +28,8 @@ libraries use `tokio`.
 ## Usage
 
 0. Install Tor
-1. Make sure Tor can be started but is _not_ currently running
+1. Make sure Tor can be started but is _not_ currently running (see
+   below for the Tor command that is used)
 2. In one terminal, run the listener (as root, see below for reason)
 3. In another terminal, run the dialer (does not need root)
 
