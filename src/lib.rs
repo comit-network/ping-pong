@@ -81,7 +81,6 @@ pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
     //
 
     let sock = TcpStream::connect(*TOR_CP_ADDR).await?;
-
     let mut utc = UnauthenticatedConn::new(sock);
 
     let info = match utc.load_protocol_info().await {
@@ -94,9 +93,7 @@ pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
         bail!("failed to authenticate with Tor")
     }
     let mut ac = utc.into_authenticated().await;
-
     ac.set_async_event_handler(Some(|_| async move { Ok(()) }));
-
     ac.take_ownership().await.unwrap();
 
     //
