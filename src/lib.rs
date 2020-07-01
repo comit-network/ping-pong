@@ -38,7 +38,7 @@ use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
 use torut::{
     control::UnauthenticatedConn,
     onion::TorSecretKeyV3,
-    utils::{run_tor, AutoKillChild},
+    utils::{AutoKillChild},
 };
 
 use crate::transport::TokioTcpConfig;
@@ -73,26 +73,8 @@ pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
 
 /// Entry point to run the ping-pong application as a listener.
 pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
-    //
-    // Run local Tor instance.
-    //
     debug!("if Tor is already running attempting to start it again may hang ...");
-
-    let child = run_tor(
-        "/usr/bin/tor",
-        &mut [
-            "--CookieAuthentication",
-            "1",
-            "--defaults-torrc",
-            "/usr/share/tor/tor-service-defaults-torrc",
-            "-f",
-            "/etc/tor/torrc",
-        ]
-        .iter(),
-    )
-    .expect("Starting tor filed");
-    let _child = AutoKillChild::new(child);
-    info!("Tor instance started");
+    let _child = run_tor();
 
     //
     // Get an authenticated connection to the Tor via the Tor Controller protocol.
@@ -228,4 +210,23 @@ pub type PingPongTransport = Boxed<
 pub async fn connect_tor_socks_proxy<'a>(dest: impl IntoTargetAddr<'a>) -> Result<TcpStream> {
     let sock = Socks5Stream::connect(*TOR_PROXY_ADDR, dest).await?;
     Ok(sock.into_inner())
+}
+
+fn run_tor() -> AutoKillChild {
+    let child = torut::utils::run_tor(
+        "/usr/bin/tor",
+        &mut [
+            "--CookieAuthentication",
+            "1",
+            "--defaults-torrc",
+            "/usr/share/tor/tor-service-defaults-torrc",
+            "-f",
+            "/etc/tor/torrc",
+        ]
+        .iter(),
+    )
+    .expect("Starting tor filed");
+    let child = AutoKillChild::new(child);
+    info!("Tor instance started");
+    child
 }
