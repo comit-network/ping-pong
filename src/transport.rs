@@ -69,7 +69,7 @@ const DEFAULT_SOCKS_PORT: u16 = 9050;
 /// obtained by libp2p through the tokio reactor.
 #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
 #[derive(Debug, Clone, Default)]
-pub struct TokioTcpConfig {
+pub struct TorTokioTcpConfig {
     /// How long a listener should sleep after receiving an error, before trying again.
     sleep_on_error: Duration,
     /// TTL to set for opened sockets, or `None` to keep default.
@@ -82,10 +82,10 @@ pub struct TokioTcpConfig {
     socks_port: u16,
 }
 
-impl TokioTcpConfig {
+impl TorTokioTcpConfig {
     /// Creates a new configuration object for TCP/IP.
-    pub fn new() -> TokioTcpConfig {
-        TokioTcpConfig {
+    pub fn new() -> TorTokioTcpConfig {
+        TorTokioTcpConfig {
             sleep_on_error: Duration::from_millis(100),
             ttl: None,
             nodelay: None,
@@ -122,7 +122,7 @@ impl TokioTcpConfig {
 type Listener<TUpgrade, TError> =
     Pin<Box<dyn Stream<Item = Result<ListenerEvent<TUpgrade, TError>, TError>> + Send>>;
 
-impl Transport for TokioTcpConfig {
+impl Transport for TorTokioTcpConfig {
     type Output = TokioTcpTransStream;
     type Error = io::Error;
     type Listener = Listener<Self::ListenerUpgrade, Self::Error>;
@@ -137,7 +137,7 @@ impl Transport for TokioTcpConfig {
         let socket_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, *port));
 
         async fn do_listen(
-            cfg: TokioTcpConfig,
+            cfg: TorTokioTcpConfig,
             socket_addr: SocketAddr,
         ) -> Result<
             impl Stream<
@@ -232,7 +232,7 @@ impl Transport for TokioTcpConfig {
         debug!("onion: {}", dest);
 
         async fn do_dial(
-            cfg: TokioTcpConfig,
+            cfg: TorTokioTcpConfig,
             dest: String,
         ) -> Result<TokioTcpTransStream, io::Error> {
             info!("connecting to Tor proxy ...");
@@ -272,7 +272,7 @@ pub struct TokioTcpListenStream {
     /// Temporary buffer of listener events.
     pending: Buffer<TokioTcpTransStream>,
     /// Original configuration.
-    config: TokioTcpConfig,
+    config: TorTokioTcpConfig,
 }
 
 impl TokioTcpListenStream {
@@ -375,7 +375,7 @@ impl Drop for TokioTcpTransStream {
 }
 
 /// Applies the socket configuration parameters to a socket.
-fn apply_config(config: &TokioTcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
+fn apply_config(config: &TorTokioTcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
     if let Some(ttl) = config.ttl {
         socket.set_ttl(ttl)?;
     }

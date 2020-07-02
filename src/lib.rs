@@ -35,7 +35,7 @@ use libp2p::{
 use tokio::net::TcpStream;
 use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
 
-use crate::transport::TokioTcpConfig;
+use crate::transport::TorTokioTcpConfig;
 
 /// Entry point to run the ping-pong application as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
@@ -118,7 +118,7 @@ impl libp2p::core::Executor for TokioExecutor {
 /// - Authentication via secio
 /// - Multiplexing via yamux or mplex
 pub fn build_transport(keypair: identity::Keypair, map: HashMap<Multiaddr, u16>) -> anyhow::Result<PingPongTransport> {
-    let transport = TokioTcpConfig::new().nodelay(true).onion_map(map);
+    let transport = TorTokioTcpConfig::new().nodelay(true).onion_map(map);
     let transport = DnsConfig::new(transport)?;
 
     let transport = transport
