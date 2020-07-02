@@ -6,12 +6,12 @@ pub use cli::Opt;
 pub use onion::OnionAddr;
 
 use std::{
-    fs,
     io,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
+    collections::HashMap,
 };
 
 use anyhow::{Result};
@@ -47,10 +47,11 @@ lazy_static! {
 
 /// Entry point to run the ping-pong application as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
+    let map = HashMap::new();
     let config = PingConfig::new()
         .with_keep_alive(true)
         .with_interval(Duration::from_secs(1));
-    let mut swarm = crate::build_swarm(config)?;
+    let mut swarm = crate::build_swarm(config, map)?;
 
     Swarm::dial_addr(&mut swarm, addr).unwrap();
 
@@ -67,18 +68,15 @@ pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
 }
 
 /// Entry point to run the ping-pong application as a listener.
-pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
-    let onion = fs::read_to_string("/var/lib/tor/hidden_service/hostname").expect("failed to read onion address");
-    println!(
-        "\nPing-pong onion service available at: \n\n\t{}:{}\n",
-        onion.trim(), port
-    );
+pub async fn run_listener(onion: Multiaddr) -> Result<()> {
+    let map = onion_port_map(onion.clone());
+//    let onion = fs::read_to_string("/var/lib/tor/hidden_service/hostname").expect("failed to read onion address");
+    println!("Onion service: {}", onion);
 
     let config = PingConfig::new().with_keep_alive(true);
-    let mut swarm = crate::build_swarm(config)?;
+    let mut swarm = crate::build_swarm(config, map)?;
 
-    Swarm::listen_on(&mut swarm, local_addr.clone())?;
-    println!("\nLocal service available at: \n\n\t{}\n", local_addr);
+    Swarm::listen_on(&mut swarm, onion.clone())?;
 
     future::poll_fn(move |cx: &mut Context| loop {
         match swarm.poll_next_unpin(cx) {
@@ -93,11 +91,11 @@ pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
 }
 
 /// Build a libp2p swarm (also called a switch).
-pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
+pub fn build_swarm(config: PingConfig, map: HashMap<Multiaddr, u16>) -> Result<Swarm<Ping>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
 
-    let transport = crate::build_transport(id_keys)?;
+    let transport = crate::build_transport(id_keys, map)?;
     let behaviour = Ping::new(config);
 
     let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
@@ -105,6 +103,13 @@ pub fn build_swarm(config: PingConfig) -> Result<Swarm<Ping>> {
         .build();
 
     Ok(swarm)
+}
+
+fn onion_port_map(onion: Multiaddr) -> HashMap<Multiaddr, u16> {
+    let mut map = HashMap::new();
+    // FIMXE: This shouldn't be hard coded.
+    map.insert(onion, 7777);
+    map
 }
 
 struct TokioExecutor;
@@ -120,8 +125,8 @@ impl libp2p::core::Executor for TokioExecutor {
 /// - DNS name resolution
 /// - Authentication via secio
 /// - Multiplexing via yamux or mplex
-pub fn build_transport(keypair: identity::Keypair) -> anyhow::Result<PingPongTransport> {
-    let transport = TokioTcpConfig::new().nodelay(true);
+pub fn build_transport(keypair: identity::Keypair, map: HashMap<Multiaddr, u16>) -> anyhow::Result<PingPongTransport> {
+    let transport = TokioTcpConfig::new().nodelay(true).onion_map(map);
     let transport = DnsConfig::new(transport)?;
 
     let transport = transport

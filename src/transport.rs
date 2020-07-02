@@ -49,11 +49,11 @@ use libp2p::core::{
 use log::{debug, info, trace};
 use socket2::{Domain, Socket, Type};
 use std::{
-    collections::VecDeque,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, IpAddr},
+    collections::{HashMap, VecDeque},
     convert::TryFrom,
     io,
     iter::{self, FromIterator},
-    net::{IpAddr, SocketAddr},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -73,6 +73,8 @@ pub struct TokioTcpConfig {
     ttl: Option<u32>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
     nodelay: Option<bool>,
+    /// Map of Multiaddr to port number for local socket.
+    onion_map: HashMap<Multiaddr, u16>,
 }
 
 impl TokioTcpConfig {
@@ -82,12 +84,19 @@ impl TokioTcpConfig {
             sleep_on_error: Duration::from_millis(100),
             ttl: None,
             nodelay: None,
+            onion_map: HashMap::new(),
         }
     }
 
     /// Sets the `TCP_NODELAY` to set for opened sockets.
     pub fn nodelay(mut self, value: bool) -> Self {
         self.nodelay = Some(value);
+        self
+    }
+
+    /// Sets the map for onion address -> local socket port number.
+    pub fn onion_map(mut self, value: HashMap<Multiaddr, u16>) -> Self {
+        self.onion_map = value;
         self
     }
 }
@@ -103,11 +112,11 @@ impl Transport for TokioTcpConfig {
     type Dial = Pin<Box<dyn Future<Output = Result<TokioTcpTransStream, io::Error>> + Send>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
-            sa
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
+        let port = match self.onion_map.get(&addr) {
+            Some(port) => port,
+            None => return Err(TransportError::MultiaddrNotSupported(addr)),
         };
+        let socket_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, *port));
 
         async fn do_listen(
             cfg: TokioTcpConfig,
@@ -385,23 +394,6 @@ impl AsyncWrite for TokioTcpTransStream {
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.inner), cx)
-    }
-}
-
-// This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
-    let mut iter = addr.iter();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
-
-    if iter.next().is_some() {
-        return Err(());
-    }
-
-    match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        (Protocol::Ip6(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        _ => Err(()),
     }
 }
 

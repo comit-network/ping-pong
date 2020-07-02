@@ -7,10 +7,8 @@ use structopt::StructOpt;
 
 use ping_pong::{run_dialer, run_listener, OnionAddr, Opt};
 
-/// Local ping-pong server address.
-const LISTENER_ADDR: &str = "/ip4/127.0.0.1/tcp/7777";
-/// Onion service port.
-const ONION_PORT: u16 = 7;
+/// The ping-pong onion service address.
+const ONION: &str = "/onion3/r4nttccifklkruvrztwxuhk2iy4xx7cnnex2sgogbo4zw6rnx3cq2bid:7";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -31,8 +29,8 @@ async fn main() -> Result<()> {
 
         run_dialer(addr).await?;
     } else {
-        let addr = multiaddr(LISTENER_ADDR)?;
-        run_listener(addr, ONION_PORT).await?;
+        let onion = multiaddr(ONION)?;
+        run_listener(onion).await?;
     }
 
     Ok(())
