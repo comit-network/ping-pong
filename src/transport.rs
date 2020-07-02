@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 //
-// Copyright 2020 Tobin C. Harding.
+// Copyright 2020 CoBloX Pty Ltd.
 
 //! Implementation of the libp2p `Transport` trait for TCP/IP.
 //!
