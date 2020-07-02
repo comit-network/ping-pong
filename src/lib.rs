@@ -216,9 +216,9 @@ fn run_tor() -> AutoKillChild {
             "--CookieAuthentication",
             "1",
             "--defaults-torrc",
-            "/usr/share/tor/tor-service-defaults-torrc",
+            "tor-service-defaults-torrc",
             "-f",
-            "/etc/tor/torrc",
+            "torrc",
         ]
         .iter(),
     )
