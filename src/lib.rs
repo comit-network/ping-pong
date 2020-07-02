@@ -16,7 +16,6 @@ use std::{
 
 use anyhow::{Result};
 use futures::{future, prelude::*};
-use lazy_static::lazy_static;
 use libp2p::{
     core::{
         either::EitherError,
@@ -37,13 +36,6 @@ use tokio::net::TcpStream;
 use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
 
 use crate::transport::TokioTcpConfig;
-
-lazy_static! {
-    /// The default TOR socks5 proxy address, `127.0.0.1:9050`.
-    pub static ref TOR_PROXY_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 9050));
-    /// The default TOR Controller Protocol address, `127.0.0.1:9051`.
-    pub static ref TOR_CP_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 9051));
-}
 
 /// Entry point to run the ping-pong application as a dialer.
 pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
@@ -155,7 +147,8 @@ pub type PingPongTransport = Boxed<
 >;
 
 /// Connect to the Tor socks5 proxy socket.
-pub async fn connect_tor_socks_proxy<'a>(dest: impl IntoTargetAddr<'a>) -> Result<TcpStream> {
-    let sock = Socks5Stream::connect(*TOR_PROXY_ADDR, dest).await?;
-    Ok(sock.into_inner())
+pub async fn connect_tor_socks_proxy<'a>(dest: impl IntoTargetAddr<'a>, port: u16) -> Result<TcpStream> {
+    let tor_sock = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port));
+    let stream = Socks5Stream::connect(tor_sock, dest).await?;
+    Ok(stream.into_inner())
 }

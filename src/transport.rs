@@ -60,6 +60,9 @@ use std::{
 };
 use tokio::net::{TcpListener, TcpStream};
 
+/// Default port for the Tor SOCKS5 proxy.
+const DEFAULT_SOCKS_PORT: u16 = 9050;
+
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
 /// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
@@ -75,6 +78,8 @@ pub struct TokioTcpConfig {
     nodelay: Option<bool>,
     /// Map of Multiaddr to port number for local socket.
     onion_map: HashMap<Multiaddr, u16>,
+    /// Tor SOCKS5 proxy port number.
+    socks_port: u16,
 }
 
 impl TokioTcpConfig {
@@ -85,6 +90,7 @@ impl TokioTcpConfig {
             ttl: None,
             nodelay: None,
             onion_map: HashMap::new(),
+            socks_port: DEFAULT_SOCKS_PORT,
         }
     }
 
@@ -103,6 +109,12 @@ impl TokioTcpConfig {
     /// Sets the map for onion address -> local socket port number.
     pub fn onion_map(mut self, value: HashMap<Multiaddr, u16>) -> Self {
         self.onion_map = value;
+        self
+    }
+
+    /// Sets the Tor SOCKS5 proxy port number.
+    pub fn socks_port(mut self, port: u16) -> Self {
+        self.socks_port = port;
         self
     }
 }
@@ -224,7 +236,7 @@ impl Transport for TokioTcpConfig {
             dest: String,
         ) -> Result<TokioTcpTransStream, io::Error> {
             info!("connecting to Tor proxy ...");
-            let stream = crate::connect_tor_socks_proxy(dest)
+            let stream = crate::connect_tor_socks_proxy(dest, cfg.socks_port)
                 .await
                 .map_err(|e| io::Error::new(io::ErrorKind::ConnectionRefused, e))?;
             info!("connection established");
