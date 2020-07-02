@@ -19,4 +19,3 @@ socket2 = "0.3"
 structopt = "0.3"
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "tcp"] }
 tokio-socks = "0.2"
-torut = "0.1"
