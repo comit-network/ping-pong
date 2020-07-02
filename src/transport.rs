@@ -24,13 +24,6 @@
 //!
 //! Copied from github.com/libp2p/rust-libp2p/transports/tcp/lib.rs
 //! Modified by Tobin C. Harding <tobin@coblox.tech>
-//!
-//! Modified to enable communication over Tor. This Transport expects,
-//! for the listener side of your application, an onion service to be
-//! added to Tor using the Tor Controller Protocol. As such the listen
-//! code here is identical to the original libp2p tcp Transport. We
-//! modify the dialer to use the Tor socks5 proxy and pass it a
-//! Mulitaddr representing the onion service just mentioned.
 
 use anyhow::Result;
 use data_encoding::BASE32;
