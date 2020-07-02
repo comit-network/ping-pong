@@ -6,14 +6,15 @@ pub use cli::Opt;
 pub use onion::OnionAddr;
 
 use std::{
+    fs,
     io,
-    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
 
-use anyhow::{bail, Result};
+use anyhow::{Result};
 use futures::{future, prelude::*};
 use lazy_static::lazy_static;
 use libp2p::{
@@ -32,14 +33,8 @@ use libp2p::{
     swarm::SwarmBuilder,
     yamux, Multiaddr, PeerId, Swarm, Transport,
 };
-use log::{debug, info};
 use tokio::net::TcpStream;
 use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr};
-use torut::{
-    control::UnauthenticatedConn,
-    onion::TorSecretKeyV3,
-    utils::{AutoKillChild},
-};
 
 use crate::transport::TokioTcpConfig;
 
@@ -73,60 +68,11 @@ pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
 
 /// Entry point to run the ping-pong application as a listener.
 pub async fn run_listener(local_addr: Multiaddr, port: u16) -> Result<()> {
-    debug!("if Tor is already running attempting to start it again may hang ...");
-    let _child = run_tor();
-
-    //
-    // Get an authenticated connection to the Tor via the Tor Controller protocol.
-    //
-
-    let sock = TcpStream::connect(*TOR_CP_ADDR).await?;
-    let mut utc = UnauthenticatedConn::new(sock);
-
-    let info = match utc.load_protocol_info().await {
-        Ok(info) => info,
-        Err(_) => bail!("failed to load protocol info from Tor"),
-    };
-    let ad = info.make_auth_data()?.expect("failed to make auth data");
-
-    if utc.authenticate(&ad).await.is_err() {
-        bail!("failed to authenticate with Tor")
-    }
-    let mut ac = utc.into_authenticated().await;
-    ac.set_async_event_handler(Some(|_| async move { Ok(()) }));
-    ac.take_ownership().await.unwrap();
-
-    //
-    // Expose an onion service that re-directs to the echo server.
-    //
-
-    let key = TorSecretKeyV3::generate();
-    ac.add_onion_v3(
-        &key,
-        false,
-        false,
-        false,
-        None,
-        &mut [(
-            port,
-            SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), port),
-        )]
-        .iter(),
-    )
-    .await
-    .unwrap();
-
-    let torut = key.public().get_onion_address();
-    let onion = OnionAddr::from_torut(torut, port);
-
+    let onion = fs::read_to_string("/var/lib/tor/hidden_service/hostname").expect("failed to read onion address");
     println!(
-        "\nPing-pong onion service available at: \n\n\t{}\n",
-        onion.multiaddr()
+        "\nPing-pong onion service available at: \n\n\t{}:{}\n",
+        onion.trim(), port
     );
-
-    //
-    // Start the ping-pong listener.
-    //
 
     let config = PingConfig::new().with_keep_alive(true);
     let mut swarm = crate::build_swarm(config)?;
@@ -207,23 +153,4 @@ pub type PingPongTransport = Boxed<
 pub async fn connect_tor_socks_proxy<'a>(dest: impl IntoTargetAddr<'a>) -> Result<TcpStream> {
     let sock = Socks5Stream::connect(*TOR_PROXY_ADDR, dest).await?;
     Ok(sock.into_inner())
-}
-
-fn run_tor() -> AutoKillChild {
-    let child = torut::utils::run_tor(
-        "/usr/bin/tor",
-        &mut [
-            "--CookieAuthentication",
-            "1",
-            "--defaults-torrc",
-            "tor-service-defaults-torrc",
-            "-f",
-            "torrc",
-        ]
-        .iter(),
-    )
-    .expect("Starting tor filed");
-    let child = AutoKillChild::new(child);
-    info!("Tor instance started");
-    child
 }

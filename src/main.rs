@@ -14,7 +14,7 @@ const PORT: u16 = 7777;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    simple_logger::init_with_level(Level::Info).unwrap();
+    simple_logger::init_with_level(Level::Debug).unwrap();
 
     let opt = Opt::from_args();
 
