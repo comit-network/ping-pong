@@ -9,8 +9,8 @@ use ping_pong::{run_dialer, run_listener, OnionAddr, Opt};
 
 /// Local ping-pong server address.
 const LISTENER_ADDR: &str = "/ip4/127.0.0.1/tcp/7777";
-/// Local port as well as the onion service port.
-const PORT: u16 = 7777;
+/// Onion service port.
+const ONION_PORT: u16 = 7;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
         run_dialer(addr).await?;
     } else {
         let addr = multiaddr(LISTENER_ADDR)?;
-        run_listener(addr, PORT).await?;
+        run_listener(addr, ONION_PORT).await?;
     }
 
     Ok(())

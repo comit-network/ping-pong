@@ -70,7 +70,7 @@ CookieAuthentication 1
 ## address y:z.
 
 HiddenServiceDir /var/lib/tor/hidden_service/
-HiddenServicePort 7777 127.0.0.1:7777
+HiddenServicePort 7 127.0.0.1:7777
 
 #HiddenServiceDir /var/lib/tor/other_hidden_service/
 #HiddenServicePort 80 127.0.0.1:80
