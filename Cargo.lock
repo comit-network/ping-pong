@@ -1261,7 +1261,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "ping-pong"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1270,7 +1270,6 @@ dependencies = [
  "futures-timer",
  "get_if_addrs",
  "ipnet",
- "lazy_static",
  "libp2p",
  "log",
  "simple_logger",

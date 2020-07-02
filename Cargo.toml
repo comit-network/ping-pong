@@ -1,6 +1,6 @@
 [package]
 name = "ping-pong"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Tobin C. Harding <tobin@coblox.tech>"]
 edition = "2018"
 
@@ -12,7 +12,6 @@ futures = "0.3"
 futures-timer = "3.0"
 get_if_addrs = "0.5"
 ipnet = "2.3"
-lazy_static = "1.4"
 libp2p = { version = "0.20", default-features = false, features = [ "secio", "yamux", "mplex", "dns", "tcp-tokio", "ping"] }
 log = "0.4"
 simple_logger = "1.6"

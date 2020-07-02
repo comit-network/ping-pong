@@ -1,9 +1,7 @@
 mod cli;
-mod onion;
 pub mod transport;
 
 pub use cli::Opt;
-pub use onion::OnionAddr;
 
 use std::{
     io,
@@ -62,7 +60,6 @@ pub async fn run_dialer(addr: Multiaddr) -> Result<()> {
 /// Entry point to run the ping-pong application as a listener.
 pub async fn run_listener(onion: Multiaddr) -> Result<()> {
     let map = onion_port_map(onion.clone());
-//    let onion = fs::read_to_string("/var/lib/tor/hidden_service/hostname").expect("failed to read onion address");
     println!("Onion service: {}", onion);
 
     let config = PingConfig::new().with_keep_alive(true);
