@@ -2,10 +2,10 @@
 
 Basic TCP peer to peer connectivity [1] using libp2p over the Tor network.
 
-## ping-pong
+## ping-pong v0.2
 
-From v0.2 onward there are a number of steps one needs to take in
-order to run ping-pong.
+From v0.2 there are a number of steps one needs to take in order to
+run ping-pong.
 
 0. Install Tor
 1. Configure an onion service using the Tor run file. You can use
@@ -24,6 +24,9 @@ in another terminal, and the dialer in a third terminal.
 
 See `ping-pong --help` for more information.
 
+
+Version 0.2 no longer uses the Tor Control Protocol or the `torut`
+library to access it.
 
 ## ping-pong v0.1
 
