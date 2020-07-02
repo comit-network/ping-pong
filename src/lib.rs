@@ -1,6 +1,6 @@
 mod cli;
 mod onion;
-mod transport;
+pub mod transport;
 
 pub use cli::Opt;
 pub use onion::OnionAddr;

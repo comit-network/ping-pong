@@ -88,6 +88,12 @@ impl TokioTcpConfig {
         }
     }
 
+    /// Sets the TTL to set for opened sockets.
+    pub fn ttl(mut self, value: u32) -> Self {
+        self.ttl = Some(value);
+        self
+    }
+
     /// Sets the `TCP_NODELAY` to set for opened sockets.
     pub fn nodelay(mut self, value: bool) -> Self {
         self.nodelay = Some(value);
