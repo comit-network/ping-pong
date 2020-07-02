@@ -32,8 +32,8 @@
 //! modify the dialer to use the Tor socks5 proxy and pass it a
 //! Mulitaddr representing the onion service just mentioned.
 
-use crate::OnionAddr;
 use anyhow::Result;
+use data_encoding::BASE32;
 use futures::{
     future::{self, Ready},
     prelude::*,
@@ -225,11 +225,9 @@ impl Transport for TorTokioTcpConfig {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dest = tor_address_format(addr.clone())
-            .map_err(|_| TransportError::MultiaddrNotSupported(addr.clone()))?;
-
-        debug!("multi: {}", addr);
-        debug!("onion: {}", dest);
+        let dest = tor_address_string(addr.clone())
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
+        debug!("dest: {}", dest);
 
         async fn do_dial(
             cfg: TorTokioTcpConfig,
@@ -250,10 +248,19 @@ impl Transport for TorTokioTcpConfig {
     }
 }
 
-// Tor doesn't handle multi addresses ... yet.
-fn tor_address_format(multi: Multiaddr) -> Result<String> {
-    let onion = OnionAddr::from_multiaddr(multi)?;
-    Ok(onion.address())
+// Tor expects address in form: ADDR.onion:PORT
+fn tor_address_string(mut multi: Multiaddr) -> Option<String> {
+    let (encoded, port) = match multi.pop()? {
+        Protocol::Onion(addr, port) => {
+            (BASE32.encode(addr.as_ref()), port)
+        }
+        Protocol::Onion3(addr) => {
+            (BASE32.encode(addr.hash()), addr.port())
+        }
+        _ => return None,
+    };
+    let addr = format!("{}.onion:{}", encoded.to_lowercase(), port);
+    Some(addr)
 }
 
 /// Stream that listens on an TCP/IP address.
@@ -518,4 +525,27 @@ fn check_for_interface_changes<T>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tor_address_string;
+
+    #[test]
+    fn can_format_tor_address_v3() {
+        let multi = "/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234".parse().expect("failed to parse multiaddr");
+        let want = "vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd.onion:1234";
+        let got = tor_address_string(multi).expect("failed to stringify");
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn can_format_tor_address_v2() {
+        let multi = "/onion/aaimaq4ygg2iegci:80".parse().expect("failed to parse multiaddr");
+        let want = "aaimaq4ygg2iegci.onion:80";
+        let got = tor_address_string(multi).expect("failed to stringify");
+
+        assert_eq!(got, want);
+    }
 }
